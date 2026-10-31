@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as sshConfig from 'ssh-config';
 import app from '../app';
 import logger from '../logger';
 import { getUserSetting } from '../host';
@@ -14,6 +13,14 @@ import Scheduler from './scheduler';
 import { createRemoteIfNoneExist, removeRemoteFs } from './remoteFs';
 import TransferTask from './transferTask';
 import localFs from './localFs';
+import {
+  computeSshConfig,
+  firstIdentityFile,
+  IdentityFileType,
+  readIdentityFileType,
+  resolveIdentityAgent,
+  resolveSshPath,
+} from './sshConfig';
 
 type Omit<T, U> = Pick<T, Exclude<keyof T, U>>;
 
@@ -69,11 +76,15 @@ interface WatcherConfig {
 interface SftpOption {
   // sftp
   agent?: string;
+  agentIdentityPath?: string;
+  identitiesOnly?: boolean;
   privateKeyPath?: string;
   passphrase: string | true;
   interactiveAuth: boolean | string[];
   algorithms: any;
   sshConfigPath?: string;
+  keepaliveInterval?: number;
+  keepaliveCountMax?: number;
   concurrency: number;
   sshCustomParams?: string;
   hop: (Host & SftpOption)[] | (Host & SftpOption);
@@ -189,8 +200,9 @@ function setConfigValue(config, key, value) {
   }
 }
 
-function mergeConfigWithExternalRefer(
-  config: FileServiceConfig
+export function mergeConfigWithExternalRefer(
+  config: FileServiceConfig,
+  workspace: string
 ): FileServiceConfig {
   const copyed = Object.assign({}, config);
 
@@ -242,69 +254,66 @@ function mergeConfigWithExternalRefer(
     return copyed;
   }
 
-  const parsedSSHConfig = sshConfig.parse(sshConfigContent);
-  const section = parsedSSHConfig.find({
-    Host: copyed.host,
-  });
+  const computed = computeSshConfig(sshConfigContent, copyed.host);
 
-  if (section === null) {
-    return copyed;
+  if (computed.hostname) {
+    copyed.host = computed.hostname;
+  }
+  if (computed.port !== undefined) {
+    setConfigValue(copyed, 'port', computed.port);
+  }
+  if (computed.user !== undefined) {
+    setConfigValue(copyed, 'username', computed.user);
   }
 
-  const mapping = new Map([
-    ['hostname', 'host'],
-    ['port', 'port'],
-    ['user', 'username'],
-    ['identityfile', 'privateKeyPath'],
-    ['serveraliveinterval', 'keepalive'],
-    ['connecttimeout', 'connTimeout'],
-  ]);
+  const connectTimeout = parseInt(computed.connecttimeout, 10);
+  if (!isNaN(connectTimeout)) {
+    setConfigValue(copyed, 'connectTimeout', connectTimeout * 1000);
+  }
+  const keepaliveInterval = parseInt(computed.serveraliveinterval, 10);
+  if (!isNaN(keepaliveInterval)) {
+    setConfigValue(copyed, 'keepaliveInterval', keepaliveInterval * 1000);
+  }
+  const keepaliveCountMax = parseInt(computed.serveralivecountmax, 10);
+  if (!isNaN(keepaliveCountMax)) {
+    setConfigValue(copyed, 'keepaliveCountMax', keepaliveCountMax);
+  }
 
-  section.config.forEach(line => {
-    if (!line.param) {
-      return;
+  const identityAgent = resolveIdentityAgent(computed.identityagent);
+  copyed.identitiesOnly =
+    typeof computed.identitiesonly === 'string' &&
+    computed.identitiesonly.toLowerCase() === 'yes';
+
+  if (copyed.privateKeyPath) {
+    const configuredKeyPath = resolveSshPath(copyed.privateKeyPath, workspace);
+    if (fs.existsSync(configuredKeyPath)) {
+      copyed.privateKeyPath = configuredKeyPath;
+    } else {
+      logger.warn(
+        `Private key ${configuredKeyPath} not found; falling back to SSH config IdentityFile`
+      );
+      delete copyed.privateKeyPath;
     }
+  }
 
-    const key = mapping.get(line.param.toLowerCase());
-
-    if (key !== undefined) {
-      if (key === 'host') {
-        copyed[key] = line.value;
+  if (!copyed.privateKeyPath) {
+    const identityFile = firstIdentityFile(computed.identityfile);
+    if (identityFile) {
+      const identityPath = resolveSshPath(identityFile, workspace);
+      const identityType = readIdentityFileType(
+        identityPath,
+        copyed.passphrase
+      );
+      if (identityType === IdentityFileType.Public) {
+        copyed.agentIdentityPath = identityPath;
+        if (identityAgent) {
+          setConfigValue(copyed, 'agent', identityAgent);
+        }
       } else {
-        setConfigValue(copyed, key, line.value);
+        copyed.privateKeyPath = identityPath;
       }
     }
-  });
-
-  // Bug introduced in pull request #69 : Fix ssh config resolution
-  /* const parsedSSHConfig = sshConfig.parse(sshConfigContent);
-  const computed = parsedSSHConfig.compute(copyed.host);
-
-  const mapping = new Map([
-    ['hostname', 'host'],
-    ['port', 'port'],
-    ['user', 'username'],
-    ['serveraliveinterval', 'keepalive'],
-    ['connecttimeout', 'connTimeout'],
-  ]);
-
-  Object.entries<any>(computed).forEach(([param, value]) => {
-    if (param.toLowerCase() === 'identityfile') {
-      setConfigValue(copyed, 'privateKeyPath', value[0]);
-      return;
-    }
-
-    const key = mapping.get(param.toLowerCase());
-
-    if (key !== undefined) {
-      // don't need consider config priority, always set to the resolve host.
-      if (key === 'host') {
-        copyed[key] = value;
-      } else {
-        setConfigValue(copyed, key, value);
-      }
-    }
-  }); */
+  }
 
   return copyed;
 }
@@ -313,7 +322,7 @@ function getCompleteConfig(
   config: FileServiceConfig,
   workspace: string
 ): FileServiceConfig {
-  const mergedConfig = mergeConfigWithExternalRefer(config);
+  const mergedConfig = mergeConfigWithExternalRefer(config, workspace);
 
   if (mergedConfig.agent && mergedConfig.privateKeyPath) {
     logger.warn(
@@ -328,6 +337,12 @@ function getCompleteConfig(
     mergedConfig.privateKeyPath = resolvePath(
       workspace,
       mergedConfig.privateKeyPath
+    );
+  }
+  if (mergedConfig.agentIdentityPath) {
+    mergedConfig.agentIdentityPath = resolvePath(
+      workspace,
+      mergedConfig.agentIdentityPath
     );
   }
 

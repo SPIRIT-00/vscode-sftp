@@ -5,6 +5,7 @@ import localFs from '../localFs';
 import { FileSystem, RemoteFileSystem, SFTPFileSystem } from '../fs';
 import logger from '../../logger';
 import CustomError from '../customError';
+import { createSingleIdentityAgent } from './singleIdentityAgent';
 
 let MAX_OPEN_FD_NUM = 222;
 
@@ -25,7 +26,7 @@ export default class SSHClient extends RemoteClient {
       // or interactiveAuth : array of phrases
       (Array.isArray(connectOption.interactiveAuth) && !!connectOption.interactiveAuth.length) ||
       // or key defined
-      ['password', 'agent', 'privateKeyPath'].some(
+      ['password', 'agent', 'privateKeyPath', 'agentIdentityPath'].some(
         // tslint:disable-next-line triple-equals
         key => connectOption[key] != undefined
       )
@@ -68,6 +69,7 @@ export default class SSHClient extends RemoteClient {
           const buffer = await fs.readFile(curOpt.privateKeyPath);
           curOpt.privateKey = buffer.toString();
         }
+        await this._prepareAgent(curOpt, fs);
 
         const client = new SSHClient(curOpt);
         this.hoppingClients.push(client);
@@ -89,6 +91,7 @@ export default class SSHClient extends RemoteClient {
       const buffer = await fs.readFile(lastOption.privateKeyPath);
       lastOption.privateKey = buffer.toString();
     }
+    await this._prepareAgent(lastOption, fs);
 
     await this._connectSSHClient(this._client, { ...lastOption, sock }, config);
     this.sftp = await this._getSftp(this._client);
@@ -99,6 +102,24 @@ export default class SSHClient extends RemoteClient {
       }
       this._limitSftpFileDescriptor();
     }
+  }
+
+  private async _prepareAgent(
+    option: ConnectOption,
+    fs: FileSystem | RemoteFileSystem
+  ): Promise<void> {
+    if (!option.agentIdentityPath) {
+      return;
+    }
+    if (typeof option.agent !== 'string' || option.agent.length === 0) {
+      throw new Error(
+        `IdentityFile ${option.agentIdentityPath} is public, but no IdentityAgent is configured`
+      );
+    }
+
+    const publicKey = await fs.readFile(option.agentIdentityPath);
+    option.agent = createSingleIdentityAgent(option.agent, publicKey);
+    delete option.agentIdentityPath;
   }
 
   // connect1(readline): Promise<void> {
@@ -245,7 +266,7 @@ export default class SSHClient extends RemoteClient {
     } = remoteOption;
 
     // explict compare to true, cause we want to distinct between string and true
-    if (option.passphrase === true) {
+    if (option.passphrase === true && option.privateKey) {
       option.passphrase = await config.askForPasswd(
         `[${option.host}]: Enter your passphrase`
       );

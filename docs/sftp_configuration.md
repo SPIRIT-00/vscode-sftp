@@ -106,6 +106,12 @@ Explicit overrides for the default transport layer algorithms used for the conne
 ### sshConfigPath
 Absolute path to your SSH configuration file.
 
+Host aliases are resolved together with matching wildcard sections such as
+`Host *`. If `privateKeyPath` is configured but does not exist, authentication
+falls back to `IdentityFile`. A public `IdentityFile` is used with
+`IdentityAgent` as a single selected agent identity, so other keys held by the
+agent are not offered.
+
 | Key | Value | Default |
 | --- | --- | --- |
 | *sshConfigPath* | *string* | `~/.ssh/config` |

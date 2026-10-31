@@ -26,15 +26,7 @@ function createRemoteFs({ remoteTimeOffsetInHours = 0 } = {}) {
 }
 
 async function runTasks(tasks: TransferTask[]) {
-  return Promise.all(
-    tasks.map(async task => {
-      try {
-        await task.run();
-      } catch (error) {
-        console.log('run task fail', error);
-      }
-    })
-  );
+  return Promise.all(tasks.map(task => task.run()));
 }
 
 const file = (c, time = 0) => ({

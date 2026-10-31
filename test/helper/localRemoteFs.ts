@@ -27,6 +27,25 @@ export default class LocalRemoteFileSystem extends RemoteFileSystem {
       this.toRemoteTimeInSecnonds(mtime)
     );
   }
+
+  put(input: fs.ReadStream, path: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      input.on('data', chunk => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      input.once('error', reject);
+      input.once('end', () => {
+        fs.writeFile(path, Buffer.concat(chunks), error => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    });
+  }
 }
 
 [
@@ -36,7 +55,6 @@ export default class LocalRemoteFileSystem extends RemoteFileSystem {
   'close',
   'fstat',
   'get',
-  'put',
   'mkdir',
   'ensureDir',
   'list',

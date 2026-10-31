@@ -7,6 +7,8 @@ export interface ConnectOption {
   username?: string;
   password?: string;
   connectTimeout?: number;
+  keepaliveInterval?: number;
+  keepaliveCountMax?: number;
   debug(x: string): void;
 
   // ssh-only
@@ -14,7 +16,8 @@ export interface ConnectOption {
   privateKey?: string;
   passphrase?: string | boolean;
   interactiveAuth?: boolean | string[];
-  agent?: string;
+  agent?: any;
+  agentIdentityPath?: string;
   sock?: any;
   hop?: ConnectOption | ConnectOption[];
   limitOpenFilesOnRemote?: boolean | number;
