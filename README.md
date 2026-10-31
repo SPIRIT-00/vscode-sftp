@@ -2,7 +2,7 @@
 
 Проект основан на [fibanez7/vscode-sftp](https://github.com/fibanez7/vscode-sftp) и сохраняет его функциональность.
 
-В этот форк добавлена поддержка SSH-конфигурации и выбора конкретного ключа ssh агента.
+В этот форк добавлена поддержка alias в `host` и выбор приватного ключа из ssh агента по указанному в конфигурации публичному ключу, вместо перебора всех ключей внутри агента.
 
 ## Настройка
 
@@ -14,7 +14,7 @@
 	"context": "_items",
 	"host": "<alias>",
 	"protocol": "sftp",
-	"sshConfigPath": "/home/user/.ssh/config",
+	"sshConfigPath": "~/.ssh/config",
 	"remotePath": "/var/lib/myproject/import/",
 	"uploadOnSave": true,
 	"useTempFile": true,
@@ -30,8 +30,8 @@ Host *
 Host <alias>
 	HostName <ip>
 	IdentityFile ~/.ssh/key.pub
-	User user
-	Port 22
+	User <remoteUser>
+	Port <remotePort>
 ```
 
 Для алиаса из `host` обрабатываются подходящие секции `Host`, включая общие параметры из `Host *`. Поддерживаются:
@@ -48,7 +48,7 @@ Host <alias>
 ## Выбор способа аутентификации
 
 1. Если в `sftp.json` указан существующий `privateKeyPath`, используется этот приватный ключ.
-2. Если `privateKeyPath` не указан или файл не существует, используется первый эффективный `IdentityFile` из SSH-конфигурации.
+2. Если `privateKeyPath` не указан или файл не существует, используется первый эффективный `IdentityFile` из SSH-конфигурации, указанной в `sshConfigPath`.
 3. Тип `IdentityFile` определяется по содержимому файла:
    - приватный ключ используется напрямую;
    - публичный ключ используется для выбора соответствующего приватного ключа в `IdentityAgent`.
