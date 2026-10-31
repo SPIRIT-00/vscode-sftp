@@ -90,7 +90,7 @@ Protocol to be used.
 ```
 
 ### host
-Hostname or IP address of the server.
+Hostname, IP address, or an SSH host alias from `sshConfigPath`.
 
 | Key | Value |
 | --- | --- |

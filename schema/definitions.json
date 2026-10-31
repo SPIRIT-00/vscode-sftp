@@ -162,7 +162,7 @@
     "properties": {
       "host": {
         "type": "string",
-        "description": "Hostname or IP address of the server.",
+        "description": "Hostname, IP address, or an SSH host alias from sshConfigPath.",
         "default": "localhost"
       },
       "port": {

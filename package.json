@@ -2,7 +2,7 @@
   "name": "sftp-sync-maintained",
   "displayName": "SFTP Sync Plus",
   "description": "Maintained, up-to-date fork for SFTP/FTP sync. Works on VS Code 1.123+/Node 24 (fixes the isDate crash). Independent fork — not the original 'SFTP' extension.",
-  "version": "1.18.2",
+  "version": "1.18.2-3",
   "publisher": "fibanez",
   "author": "fibanez (https://github.com/fibanez7)",
   "contributors": [
@@ -35,7 +35,7 @@
     "workspaceContains:.vscode/sftp.json"
   ],
   "icon": "resources/icon.png",
-  "main": "./dist/extension",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
