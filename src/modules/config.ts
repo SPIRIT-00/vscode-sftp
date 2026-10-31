@@ -75,6 +75,8 @@ const configScheme = {
   },
 };
 
+const configValidator = Joi.object(configScheme);
+
 const defaultConfig = {
   // common
   // name: undefined,
@@ -132,14 +134,9 @@ function getConfigPath(basePath) {
 }
 
 export function validateConfig(config) {
-  const { error } = Joi.validate(config, configScheme, {
+  const { error } = configValidator.validate(config, {
     allowUnknown: true,
     convert: false,
-    language: {
-      object: {
-        child: '!!prop "{{!child}}" fails because {{reason}}',
-      },
-    },
   });
   return error;
 }

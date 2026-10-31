@@ -211,37 +211,36 @@ export default class FTPFileSystem extends RemoteFileSystem {
       err = error;
     }
 
-    switch (err.code) {
-      case 550:
-        // Hooray, exists!
-        if (err.message.toLowerCase().indexOf('file exists') >= 0) {
-          return;
-        }
+    if (err.code === 550) {
+      // Hooray, exists!
+      if (err.message.toLowerCase().indexOf('file exists') >= 0) {
+        return;
+      }
 
-        const parentPath = this.pathResolver.dirname(dir);
-        // We are trying to create the root dir, something must go wrong.
-        if (parentPath === dir) {
-          throw err;
-        }
+      const parentPath = this.pathResolver.dirname(dir);
+      // We are trying to create the root dir, something must go wrong.
+      if (parentPath === dir) {
+        throw err;
+      }
 
-        // If goes here, we can assume the file doesn't exist
-        await this._ensureDir(parentPath, false);
+      // If goes here, we can assume the file doesn't exist
+      await this._ensureDir(parentPath, false);
+      try {
         await this.mkdir(dir);
-        break;
+        return;
+      } catch (error) {
+        // A concurrent transfer may have created the same directory.
+        err = error;
+      }
+    }
 
-      // In the case of any other error, just see if there's a dir
-      // there already.  If so, then hooray!  If not, then something
-      // is borked.
-      default:
-        try {
-          const stat = await this.lstat(dir);
-          if (stat.type !== FileType.Directory) throw err;
-        } catch {
-          // if the stat fails, then that's super weird.
-          // let the original error be the failure reason
-          throw err;
-        }
-        break;
+    // If another operation created the directory, the failed mkdir is harmless.
+    // Otherwise preserve the original mkdir error.
+    try {
+      const stat = await this.lstat(dir);
+      if (stat.type !== FileType.Directory) throw err;
+    } catch {
+      throw err;
     }
   }
 

@@ -1,6 +1,6 @@
 # vscode-sftp fork
 
-Проект основан на [fibanez7/vscode-sftp](https://github.com/fibanez7/vscode-sftp) и сохраняет его функциональность.
+Форк [fibanez7/vscode-sftp](https://github.com/fibanez7/vscode-sftp) для личного пользования.
 
 В этот форк добавлена поддержка alias в `host` и выбор приватного ключа из ssh агента по указанному в конфигурации публичному ключу, вместо перебора всех ключей внутри агента.
 
