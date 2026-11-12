@@ -16,7 +16,9 @@ import localFs from './localFs';
 import {
   computeSshConfig,
   firstIdentityFile,
+  hasSshHostAlias,
   IdentityFileType,
+  proxyJumpAlias,
   readIdentityFileType,
   resolveIdentityAgent,
   resolveSshPath,
@@ -200,6 +202,68 @@ function setConfigValue(config, key, value) {
   }
 }
 
+function applySshConfig(
+  config: any,
+  computed: ReturnType<typeof computeSshConfig>,
+  workspace: string
+) {
+  if (computed.hostname) {
+    config.host = computed.hostname;
+  }
+  if (computed.port !== undefined) {
+    setConfigValue(config, 'port', computed.port);
+  }
+  if (computed.user !== undefined) {
+    setConfigValue(config, 'username', computed.user);
+  }
+
+  const connectTimeout = parseInt(computed.connecttimeout, 10);
+  if (!isNaN(connectTimeout)) {
+    setConfigValue(config, 'connectTimeout', connectTimeout * 1000);
+  }
+  const keepaliveInterval = parseInt(computed.serveraliveinterval, 10);
+  if (!isNaN(keepaliveInterval)) {
+    setConfigValue(config, 'keepaliveInterval', keepaliveInterval * 1000);
+  }
+  const keepaliveCountMax = parseInt(computed.serveralivecountmax, 10);
+  if (!isNaN(keepaliveCountMax)) {
+    setConfigValue(config, 'keepaliveCountMax', keepaliveCountMax);
+  }
+
+  const identityAgent = resolveIdentityAgent(computed.identityagent);
+  config.identitiesOnly =
+    typeof computed.identitiesonly === 'string' &&
+    computed.identitiesonly.toLowerCase() === 'yes';
+
+  if (config.privateKeyPath) {
+    const configuredKeyPath = resolveSshPath(config.privateKeyPath, workspace);
+    if (fs.existsSync(configuredKeyPath)) {
+      config.privateKeyPath = configuredKeyPath;
+    } else {
+      logger.warn(
+        `Private key ${configuredKeyPath} not found; falling back to SSH config IdentityFile`
+      );
+      delete config.privateKeyPath;
+    }
+  }
+
+  if (!config.privateKeyPath) {
+    const identityFile = firstIdentityFile(computed.identityfile);
+    if (identityFile) {
+      const identityPath = resolveSshPath(identityFile, workspace);
+      const identityType = readIdentityFileType(identityPath, config.passphrase);
+      if (identityType === IdentityFileType.Public) {
+        config.agentIdentityPath = identityPath;
+        if (identityAgent) {
+          setConfigValue(config, 'agent', identityAgent);
+        }
+      } else {
+        config.privateKeyPath = identityPath;
+      }
+    }
+  }
+}
+
 export function mergeConfigWithExternalRefer(
   config: FileServiceConfig,
   workspace: string
@@ -255,64 +319,22 @@ export function mergeConfigWithExternalRefer(
   }
 
   const computed = computeSshConfig(sshConfigContent, copyed.host);
+  applySshConfig(copyed, computed, workspace);
 
-  if (computed.hostname) {
-    copyed.host = computed.hostname;
-  }
-  if (computed.port !== undefined) {
-    setConfigValue(copyed, 'port', computed.port);
-  }
-  if (computed.user !== undefined) {
-    setConfigValue(copyed, 'username', computed.user);
-  }
-
-  const connectTimeout = parseInt(computed.connecttimeout, 10);
-  if (!isNaN(connectTimeout)) {
-    setConfigValue(copyed, 'connectTimeout', connectTimeout * 1000);
-  }
-  const keepaliveInterval = parseInt(computed.serveraliveinterval, 10);
-  if (!isNaN(keepaliveInterval)) {
-    setConfigValue(copyed, 'keepaliveInterval', keepaliveInterval * 1000);
-  }
-  const keepaliveCountMax = parseInt(computed.serveralivecountmax, 10);
-  if (!isNaN(keepaliveCountMax)) {
-    setConfigValue(copyed, 'keepaliveCountMax', keepaliveCountMax);
-  }
-
-  const identityAgent = resolveIdentityAgent(computed.identityagent);
-  copyed.identitiesOnly =
-    typeof computed.identitiesonly === 'string' &&
-    computed.identitiesonly.toLowerCase() === 'yes';
-
-  if (copyed.privateKeyPath) {
-    const configuredKeyPath = resolveSshPath(copyed.privateKeyPath, workspace);
-    if (fs.existsSync(configuredKeyPath)) {
-      copyed.privateKeyPath = configuredKeyPath;
-    } else {
-      logger.warn(
-        `Private key ${configuredKeyPath} not found; falling back to SSH config IdentityFile`
-      );
-      delete copyed.privateKeyPath;
+  const jumpAlias = proxyJumpAlias(computed.proxyjump);
+  if (jumpAlias) {
+    if (!hasSshHostAlias(sshConfigContent, jumpAlias)) {
+      throw new Error(`ProxyJump SSH host alias ${jumpAlias} was not found`);
     }
-  }
 
-  if (!copyed.privateKeyPath) {
-    const identityFile = firstIdentityFile(computed.identityfile);
-    if (identityFile) {
-      const identityPath = resolveSshPath(identityFile, workspace);
-      const identityType = readIdentityFileType(
-        identityPath,
-        copyed.passphrase
-      );
-      if (identityType === IdentityFileType.Public) {
-        copyed.agentIdentityPath = identityPath;
-        if (identityAgent) {
-          setConfigValue(copyed, 'agent', identityAgent);
-        }
-      } else {
-        copyed.privateKeyPath = identityPath;
-      }
-    }
+    const hop = {
+      host: jumpAlias,
+      algorithms: copyed.algorithms,
+      interactiveAuth: copyed.interactiveAuth,
+      passphrase: copyed.passphrase,
+    };
+    applySshConfig(hop, computeSshConfig(sshConfigContent, jumpAlias), workspace);
+    copyed.hop = hop as any;
   }
 
   return copyed;

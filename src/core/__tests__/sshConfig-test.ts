@@ -2,7 +2,9 @@ import {
   computeSshConfig,
   detectIdentityFileType,
   firstIdentityFile,
+  hasSshHostAlias,
   IdentityFileType,
+  proxyJumpAlias,
   resolveIdentityAgent,
 } from '../sshConfig';
 import { utils } from 'ssh2';
@@ -68,6 +70,20 @@ describe('SSH config resolution', () => {
 
     expect(detectIdentityFileType(keys.private, true)).toBe(
       IdentityFileType.Private
+    );
+  });
+
+  test('recognizes ProxyJump aliases and rejects unsupported forms', () => {
+    const content = ['Host target', '  ProxyJump bastion', 'Host bastion'].join(
+      '\n'
+    );
+
+    expect(proxyJumpAlias('bastion')).toBe('bastion');
+    expect(proxyJumpAlias('none')).toBeUndefined();
+    expect(hasSshHostAlias(content, 'bastion')).toBe(true);
+    expect(hasSshHostAlias(content, 'missing')).toBe(false);
+    expect(() => proxyJumpAlias('user@bastion:2200')).toThrow(
+      'must be one SSH host alias'
     );
   });
 });

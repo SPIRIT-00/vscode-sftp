@@ -25,6 +25,31 @@ export function computeSshConfig(
   }, {});
 }
 
+export function hasSshHostAlias(content: string, alias: string): boolean {
+  const parsed = sshConfig.parse(content);
+  return parsed.some(
+    line =>
+      line.param &&
+      line.param.toLowerCase() === 'host' &&
+      line.value.split(/\s+/).indexOf(alias) !== -1
+  );
+}
+
+export function proxyJumpAlias(value: any): string | undefined {
+  if (typeof value !== 'string' || value.toLowerCase() === 'none') {
+    return undefined;
+  }
+
+  const alias = value.trim();
+  if (!alias || /[\s,@:]/.test(alias)) {
+    throw new Error(
+      `ProxyJump ${value} must be one SSH host alias; multiple jumps and user@host:port are not supported`
+    );
+  }
+
+  return alias;
+}
+
 export function resolveSshPath(value: string, workspace: string): string {
   return path.resolve(workspace, replaceHomePath(value));
 }

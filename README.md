@@ -44,6 +44,12 @@ Host <alias>
 * `IdentityAgent`
 * `IdentitiesOnly`
 * `IdentityFile`.
+* `ProxyJump` с одним alias, объявленным в том же SSH-конфиге.
+
+Для `ProxyJump bastion` расширение сначала подключается к alias `bastion`,
+затем устанавливает SFTP-соединение с целевым хостом через него. Параметры
+подключения и ключ для `bastion` берутся из его собственной секции `Host`.
+Несколько jump-host, а также формы `user@host:port` пока не поддерживаются.
 
 ## Выбор способа аутентификации
 

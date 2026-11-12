@@ -11,6 +11,9 @@
   эффективные параметры подходящих секций `Host` и `Host *`:
   `HostName`, `User`, `Port`, `ConnectTimeout`, `ServerAliveInterval` и
   `ServerAliveCountMax`.
+* Добавлен `ProxyJump` с одним alias из того же SSH-конфига. Jump-host получает
+  собственные параметры подключения и аутентификации; несколько переходов и
+  формат `user@host:port` не поддерживаются.
 * `sshConfigPath` используется и без явно заданного `privateKeyPath`; по
   умолчанию читается `~/.ssh/config`.
 * Если `privateKeyPath` отсутствует или указывает на несуществующий файл,

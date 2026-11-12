@@ -1,8 +1,7 @@
 import { Client } from 'ssh2';
-import upath from '../upath';
 import RemoteClient, { ErrorCode, ConnectOption, Config } from './remoteClient';
 import localFs from '../localFs';
-import { FileSystem, RemoteFileSystem, SFTPFileSystem } from '../fs';
+import { FileSystem } from '../fs';
 import logger from '../../logger';
 import CustomError from '../customError';
 import { createSingleIdentityAgent } from './singleIdentityAgent';
@@ -40,7 +39,9 @@ export default class SSHClient extends RemoteClient {
     const { hop, ...option } = connectOption;
 
     let lastOption: ConnectOption = option;
-    let fs: FileSystem | RemoteFileSystem = localFs;
+    // OpenSSH reads all identity files locally, including those for hosts
+    // reached through ProxyJump.
+    const fs: FileSystem = localFs;
     let sock;
     if (
       (Array.isArray(hop) && hop.length > 0) ||
@@ -48,8 +49,8 @@ export default class SSHClient extends RemoteClient {
     ) {
       this.hoppingClients = [];
       const connectOptions = Array.isArray(hop)
-        ? [option].concat(hop)
-        : [option, hop];
+        ? hop.concat([option])
+        : [hop, option];
       lastOption = connectOptions.pop()!;
 
       for (let index = 0; index < connectOptions.length; index++) {
@@ -60,9 +61,6 @@ export default class SSHClient extends RemoteClient {
         const preClient = this.hoppingClients[index - 1];
         if (preClient) {
           sock = await this._makeHopping(preClient, curOpt.host, curOpt.port);
-          fs = new SFTPFileSystem(upath, {
-            client: preClient,
-          });
         }
 
         if (curOpt.privateKeyPath) {
@@ -82,9 +80,6 @@ export default class SSHClient extends RemoteClient {
         lastOption.host,
         lastOption.port
       );
-      fs = new SFTPFileSystem(upath, {
-        client: lastClient,
-      });
     }
 
     if (lastOption.privateKeyPath) {
@@ -106,7 +101,7 @@ export default class SSHClient extends RemoteClient {
 
   private async _prepareAgent(
     option: ConnectOption,
-    fs: FileSystem | RemoteFileSystem
+    fs: FileSystem
   ): Promise<void> {
     if (!option.agentIdentityPath) {
       return;

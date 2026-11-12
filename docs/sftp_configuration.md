@@ -112,6 +112,10 @@ falls back to `IdentityFile`. A public `IdentityFile` is used with
 `IdentityAgent` as a single selected agent identity, so other keys held by the
 agent are not offered.
 
+`ProxyJump` supports one host alias declared in the same SSH config. The
+extension connects to that alias first and then reaches the configured host
+through it. Multiple jumps and `user@host:port` forms are not supported.
+
 | Key | Value | Default |
 | --- | --- | --- |
 | *sshConfigPath* | *string* | `~/.ssh/config` |
